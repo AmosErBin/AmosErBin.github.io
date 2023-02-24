@@ -1,0 +1,219 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="description" content=""><meta name="keyword"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta http-equiv="X-UA-Compatible" content="IE=edge"><title>Mysql事务ACID</title><link rel="shortcut icon" href="/images/avatar.jpeg" type="image/x-icon"><link href="/styles/site.css" rel="stylesheet"><meta name="generator" content="Hexo 6.3.0"></head><body><header class="container" id="header"><div class="header"><div class="header-left"><div class="avatar"><img src="/images/avatar.jpeg"></div><div class="author"><div class="author-name"><a href="/">Amos Wang</a></div><div class="about-me">Halo~</div></div></div><div class="header-right"><ul class="navigation"><li><a href="/archives">归档</a></li></ul></div><div class="about-me-mask"><div class="about-me-wrap"><div class="about-me__header"><div class="avatar"><img src="/images/avatar.jpeg"></div></div><ul class="socials"><li class="social-item"><span class="label"><img src="/images/socials/github.svg" alt="https://github.com/AmosErBin"></span><a href="https://github.com/AmosErBin" target="_blank" title="https://github.com/AmosErBin">https://github.com/AmosErBin</a></li><li class="social-item"><span class="label"><img src="/images/socials/email.svg" alt="wybins@gmail.com"></span><span>wybins@gmail.com</span></li></ul></div></div></div></header><div class="container post"><section class="article"><div class="title">Mysql事务ACID</div><div class="date">写于2023年02月24日</div><div class="content"><p>ACID是衡量事务的四个基本特征，即原子性、一致性、隔离性和持久性。</p>
+<span id="more"></span>
+<h2 id="原子性">原子性</h2>
+<p>事务不可分割，要么都执行，要么都不执行。<br>
+保证事务的原子性，通过undo log来保证，每一条操作都会对应一个相反的操作记录在undo log中。当执行出现异常或者回滚时，会根据undo log进行恢复。</p>
+<h2 id="持久性">持久性</h2>
+<p>事务一旦提交，对数据库的改变将会是永久性的。不会因为故障或者其他操作对其产生影响。<br>
+保证事务的持久性通过redo log来保证。</p>
+<ul>
+<li>
+<p>redo log背景<br>
+innodb作为mysql的存储引擎，数据是放在磁盘的，如果每次读写都直接操作磁盘，效率是会十分低下的。因此，innodb每次读数据都会从缓存(Buffer pool)中读数据，若缓存中不存在，则会从磁盘加载，然后放到缓存中。如果是写数据的话，会先写到缓存，然后在把缓存刷新到磁盘(脏刷)。但是当发生故障时，缓存中的数据还来不及刷新到磁盘就已经挂掉了，那么数据就会丢失。为了避免这个情况发生，就引入了redo log这个概念。</p>
+<p>当数据被修改时，不单只写入缓存，还会在redo log中记录此次操作，在事务提交时，调用fsync进行刷盘。如果mysql宕机，恢复时会先从redo log中恢复数据。并且redo log采用的是预写日志模式，会在写缓存之前先写redo log，保证了事务的持久性。</p>
+<p>既然redo log也需要在事务提交时进行刷盘，为什么它比缓存直接刷入磁盘快呢</p>
+<ul>
+<li>脏刷是随机读写，redo log是追加操作，属于顺序io</li>
+<li>脏刷每次刷一页数据，大小在16k，而redo log只需要追加真正写入的部分，体积小</li>
+</ul>
+</li>
+</ul>
+<h2 id="隔离性">隔离性</h2>
+<p>事务之间相互独立，互不干扰。<br>
+事务的四个隔离级别：读未提交、读已提交、可重复读、可串行化</p>
+<table>
+<thead>
+<tr>
+<th>隔离级别</th>
+<th>脏读</th>
+<th>不可重复读</th>
+<th>幻读</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>读未提交</td>
+<td>存在</td>
+<td>存在</td>
+<td>存在</td>
+</tr>
+<tr>
+<td>读已提交</td>
+<td>不存在</td>
+<td>存在</td>
+<td>存在</td>
+</tr>
+<tr>
+<td>可重复读</td>
+<td>不存在</td>
+<td>不存在</td>
+<td>存在</td>
+</tr>
+<tr>
+<td>可串行化</td>
+<td>不存在</td>
+<td>不存在</td>
+<td>不存在</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>脏读<br>
+在一个事务中读到另外一个事务未提交的操作。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>时序</th>
+<th>事务一</th>
+<th>事务二</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td>开始</td>
+<td>开始</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>select * from table1 where id=1;//a=1</td>
+<td></td>
+</tr>
+<tr>
+<td>T3</td>
+<td></td>
+<td>update table1 set a=2 where id=1;//a=2</td>
+</tr>
+<tr>
+<td>T4</td>
+<td>select * from table1 where id=1;//a=2</td>
+<td></td>
+</tr>
+<tr>
+<td>T5</td>
+<td>提交</td>
+<td>提交</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>不可重复读<br>
+在一个事务中第一次读到的值与第二次读到的值不一样，在第一个事务进行中，第二个事务已提交。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>时序</th>
+<th>事务一</th>
+<th>事务二</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td>开始</td>
+<td>开始</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>select * from table1 where id=1;//a=1</td>
+<td></td>
+</tr>
+<tr>
+<td>T3</td>
+<td></td>
+<td>update table1 set a=2 where id=1;//a=2</td>
+</tr>
+<tr>
+<td>T4</td>
+<td></td>
+<td>提交</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>select * from table1 where id=1;//a=1</td>
+<td></td>
+</tr>
+<tr>
+<td>T6</td>
+<td>提交</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>幻读<br>
+在一个事务中开始查询到的条数与后面实际操作的行数不一致，在第一个事务进行中，第二个事务已提交，新增或删除了几行数据。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>时序</th>
+<th>事务一</th>
+<th>事务二</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td>开始</td>
+<td>开始</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>select * from table1 where id&lt;5;//此时只有一条记录</td>
+<td></td>
+</tr>
+<tr>
+<td>T3</td>
+<td></td>
+<td>insert into table1 (id, a) values (2,2);</td>
+</tr>
+<tr>
+<td>T4</td>
+<td></td>
+<td>提交</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>update table1 set a=3 where id&lt;5;//此时更新了两条记录</td>
+<td></td>
+</tr>
+<tr>
+<td>T6</td>
+<td>提交</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="MVCC">MVCC</h3>
+<p>多版本并发控制。innodb的事务默认隔离级别为RR，通过MVCC解决了脏读、不可重复读、以及幻读的问题。通过MVCC保证在同一时刻读到的数据可能是不同的，即统一数据在同一时刻存在多个版本。<br>
+MVCC实现无锁化读写，并发性能好。innodb实现的MVCC存在多个版本的数据是通过一下几个数据结构实现的：</p>
+<ul>
+<li>隐藏列<br>
+InnoDB中每行数据都有隐藏列，隐藏列中包含了本行数据的事务id、指向undo log的指针等。</li>
+<li>undo log版本链<br>
+前面说到每行数据的隐藏列中包含了指向undo log的指针，而每条undo log也会指向更早版本的undo log，从而形成一条版本链。</li>
+<li>ReadView<br>
+通过隐藏列和版本链，MySQL可以将数据恢复到指定版本；但是具体要恢复到哪个版本，则需要根据ReadView来确定。所谓ReadView，是指事务（记做事务A）在某一时刻给整个事务系统（trx_sys）打快照，之后再进行读操作时，会将读取到的数据中的事务id与trx_sys快照比较，从而判断数据对该ReadView是否可见，即对事务A是否可见。<br>
+trx_sys中的主要内容，以及判断可见性的方法如下：<br>
+low_limit_id：表示生成ReadView时系统中应该分配给下一个事务的id。如果数据的事务id大于等于low_limit_id，则对该ReadView不可见。<br>
+up_limit_id：表示生成ReadView时当前系统中活跃的读写事务中最小的事务id。如果数据的事务id小于up_limit_id，则对该ReadView可见。<br>
+rw_trx_ids：表示生成ReadView时当前系统中活跃的读写事务的事务id列表。如果数据的事务id在low_limit_id和up_limit_id之间，则需要判断事务id是否在rw_trx_ids中：如果在，说明生成ReadView时事务仍在活跃中，因此数据对ReadView不可见；如果不在，说明生成ReadView时事务已经提交了，因此数据对ReadView可见。</li>
+</ul>
+<h2 id="一致性">一致性</h2>
+<p>等我有空了再写。。。</p>
+</div><div class="tags"><a class="tag-link" href="/tags/acid/" rel="tag">acid</a><a class="tag-link" href="/tags/%E4%BA%8B%E5%8A%A1/" rel="tag">事务</a></div></section></div><div class="container"><ul class="nav"><li>上一篇：<a href="/Go/Post1/">Golang值接收与指针接收</a></li></ul></div><div id="backToTop"><div class="back-arrow back-arrow-left"></div><div class="back-arrow back-arrow-right"></div></div><footer class="container"><div class="rights"><span>Powered by </span><a href="http://hexo.io" target="_blank">Hexo</a><span>, Theme </span><a href="https://github.com/gary-Shen/hexo-theme-bear" target="_blank">Bear</a><span>.</span></div></footer>
+<script src="/script/jquery.min.js"></script>
+
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
+
+<script src="/fancybox/jquery.fancybox.pack.js"></script>
+
+<script src="/script/index.js"></script>
+<script>(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+ga('create', 'UA-61220413-1', 'auto');
+ga('send', 'pageview');</script>
+<script src="/script/post.js"></script>
+</body></html>
