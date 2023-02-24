@@ -203,7 +203,15 @@ up_limit_id：表示生成ReadView时当前系统中活跃的读写事务中最�
 rw_trx_ids：表示生成ReadView时当前系统中活跃的读写事务的事务id列表。如果数据的事务id在low_limit_id和up_limit_id之间，则需要判断事务id是否在rw_trx_ids中：如果在，说明生成ReadView时事务仍在活跃中，因此数据对ReadView不可见；如果不在，说明生成ReadView时事务已经提交了，因此数据对ReadView可见。</li>
 </ul>
 <h2 id="一致性">一致性</h2>
-<p>等我有空了再写。。。</p>
+<p>PS:这个概念不太好理解，我到现在都对这个概念还很模糊。</p>
+<p>数据库的一致性与CAP理论中的一致性以及哈希一致性不是同一种一致性，所以有的时候很容易搞混，不易理解。<br>
+所谓数据库的一致性是指，当事务结束后，数据库的完整性约束没有被破坏，事务执行前后都是合法的数据状态。<br>
+说白了就是从事务开始到事务结束，数据由一种状态转变为另一种状态要与现实生活中的情况保持一致。举几个例子：</p>
+<ol>
+<li>当库存等于0的时候就不能再卖货了，所以要约束<code>num&lt;=0</code>时，要拒绝执行扣库存操作，否则就破坏了完整性约束。</li>
+<li>老掉牙的转账例子，a有100元，b有0元，这个系统中一共有100元，a给b转50元之后，a有50元，b有50元，这个系统中的总金额还是100元，完整性约束没有被破坏。<br>
+由上面的例子也可以看出，其实事务的一致性其实也是需要原子性、持久性和隔离性来保障的。</li>
+</ol>
 </div><div class="tags"><a class="tag-link" href="/tags/acid/" rel="tag">acid</a><a class="tag-link" href="/tags/%E4%BA%8B%E5%8A%A1/" rel="tag">事务</a></div></section></div><div class="container"><ul class="nav"><li>上一篇：<a href="/Go/Post1/">Golang值接收与指针接收</a></li></ul></div><div id="backToTop"><div class="back-arrow back-arrow-left"></div><div class="back-arrow back-arrow-right"></div></div><footer class="container"><div class="rights"><span>Powered by </span><a href="http://hexo.io" target="_blank">Hexo</a><span>, Theme </span><a href="https://github.com/gary-Shen/hexo-theme-bear" target="_blank">Bear</a><span>.</span></div></footer>
 <script src="/script/jquery.min.js"></script>
 
